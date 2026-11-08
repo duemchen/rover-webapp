@@ -1,0 +1,765 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Rover Control">
+    <meta name="theme-color" content="#007AFF">
+
+    <title>Rover Control</title>
+
+    <!-- Nipple.js für den Joystick -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/nipplejs/0.10.1/nipplejs.min.js"></script>
+    <!-- MQTT.js -->
+    <script src="https://unpkg.com/mqtt@5.10.1/dist/mqtt.min.js"></script>
+
+    <style>
+        * {
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+            margin: 0;
+            padding: 0;
+        }
+
+        :root {
+            --ios-blue: #007AFF;
+            --ios-green: #28a745;
+            --ios-red: rgb(246 7 36);
+            --ios-gray: #8E8E93;
+            --ios-bg: #F2F2F7;
+            --ios-card: #FFFFFF;
+            --safe-top: env(safe-area-inset-top, 20px);
+            --safe-bottom: env(safe-area-inset-bottom, 0px);
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
+            background-color: var(--ios-bg);
+            color: #000;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            /* Verhindert Pull-to-Refresh und Scrollen auf iOS */
+            overscroll-behavior: none;
+            touch-action: none;
+        }
+
+        .setup {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            padding: 40px 24px;
+        }
+
+        .setup.hidden {
+            display: none;
+        }
+
+        .setup h1 {
+            font-size: 26px;
+            margin-bottom: 8px;
+            text-align: center;
+        }
+
+        .setup p {
+            font-size: 15px;
+            color: var(--ios-gray);
+            text-align: center;
+            margin-bottom: 32px;
+        }
+
+        .input-group {
+            background: var(--ios-card);
+            border-radius: 12px;
+            overflow: hidden;
+            margin-bottom: 24px;
+        }
+
+        .input-row {
+            padding: 14px 16px;
+            border-bottom: 0.5px solid #C6C6C8;
+            display: flex;
+            align-items: center;
+        }
+
+        .input-row:last-child {
+            border-bottom: none;
+        }
+
+        .input-row label {
+            width: 80px;
+            font-size: 15px;
+            color: #000;
+        }
+
+        .input-row input {
+            flex: 1;
+            border: none;
+            outline: none;
+            font-size: 16px;
+            background: transparent;
+        }
+
+        .btn {
+            width: 100%;
+            padding: 16px;
+            border: none;
+            border-radius: 12px;
+            font-size: 17px;
+            font-weight: 600;
+            cursor: pointer;
+            background: var(--ios-blue);
+            color: white;
+        }
+
+        .btn:active {
+            opacity: 0.7;
+        }
+
+        .app {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+            position: relative;
+        }
+
+        .app.hidden {
+            display: none;
+        }
+
+        /* Joystick Zone */
+        #joystick-zone {
+            flex: 0 0 auto;
+            width: min(85vw, 500px);
+            height: min(85vw, 500px);
+            max-width: 500px;
+            max-height: 500px;
+            margin: 20px auto;
+            position: relative;
+            overflow: hidden;
+            border-radius: 50%;
+            background: rgba(0, 122, 255, 0.05);
+            border: 3px dashed rgba(0, 122, 255, 0.3);
+        }
+
+        /* Not-Aus Button */
+        .stop-btn {
+            width: 100%;
+            max-width: 400px;
+            margin: 0 auto 30px;
+            height: 70px;
+            border: none;
+            border-radius: 14px;
+            font-size: 22px;
+            font-weight: 700;
+            color: white;
+            cursor: pointer;
+            background-color: var(--ios-red);
+            box-shadow: 0 4px 12px rgba(255, 59, 48, 0.3);
+            transition: transform 0.1s;
+        }
+
+        .stop-btn:active {
+            transform: scale(0.96);
+        }
+
+        .home-btn {
+            width: 100%;
+            max-width: 400px;
+            margin: 0 auto 30px;
+            height: 70px;
+            border: none;
+            border-radius: 14px;
+            font-size: 22px;
+            font-weight: 700;
+            color: white;
+            cursor: pointer;
+            background-color: var(--ios-blue);
+            box-shadow: 0 4px 12px rgb(241 11 11 / 0.3);
+            transition: transform 0.1s;
+        }
+
+        .home-btn:active {
+            transform: scale(0.96);
+        }
+
+        .work-btn {
+            width: 100%;
+            max-width: 400px;
+            margin: 0 auto 30px;
+            height: 70px;
+            border: none;
+            border-radius: 14px;
+            font-size: 22px;
+            font-weight: 700;
+            color: white;
+            cursor: pointer;
+            background-color: var(--ios-green);
+            box-shadow: 0 4px 12px rgb(241 11 11 / 0.3);
+            transition: transform 0.1s;
+        }
+
+        .work-btn:active {
+            transform: scale(0.96);
+        }
+
+
+        .data-label {
+            font-size: 16px;
+            font-weight: 600;
+            color: #000;
+            margin-bottom: 8px;
+            text-align: center;
+            min-height: 24px;
+            font-family: 'SF Mono', Menlo, monospace;
+        }
+
+        .status-bar {
+            position: fixed;
+            bottom: calc(var(--safe-bottom) + 20px);
+            font-size: 13px;
+            color: var(--ios-gray);
+            text-align: center;
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--ios-gray);
+        }
+
+        .status-dot.connected {
+            background: var(--ios-green);
+        }
+
+        .status-dot.connecting {
+            background: #FF9500;
+            animation: pulse 1s infinite;
+        }
+
+        .status-dot.error {
+            background: var(--ios-red);
+        }
+
+        @keyframes pulse {
+            0%, 100% {
+                opacity: 1;
+            }
+            50% {
+                opacity: 0.4;
+            }
+        }
+
+        .settings-link {
+            color: var(--ios-blue);
+            font-size: 15px;
+            text-decoration: none;
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-family: inherit;
+            font-weight: 600;
+        }
+
+        .debug-box {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            right: 10px;
+            background: #fff3cd;
+            border: 2px solid #ffc107;
+            border-radius: 8px;
+            padding: 12px;
+            font-family: monospace;
+            font-size: 12px;
+            z-index: 9999;
+            display: none;
+            word-wrap: break-word;
+        }
+
+        .debug-box.show {
+            display: block;
+        }
+
+        .debug-box.error {
+            background: #f8d7da;
+            border-color: #f5c6cb;
+            color: #721c24;
+        }
+
+        /* iOS Touch-/Auswahl-Sperren für Joystick-Betrieb */
+        html, body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            overscroll-behavior: none;
+            -webkit-user-select: none;
+            user-select: none;
+            -webkit-touch-callout: none;
+            -webkit-text-size-adjust: 100%;
+            touch-action: none;
+        }
+
+        /* Eingabefelder im Setup müssen trotzdem editierbar bleiben */
+        input, textarea {
+            -webkit-user-select: text;
+            user-select: text;
+            -webkit-touch-callout: default;
+            touch-action: manipulation;
+        }
+
+        button {
+            -webkit-user-select: none;
+            user-select: none;
+            -webkit-touch-callout: none;
+        }
+
+        /* Joystick-Zone komplett gegen Markieren/Scrollen absichern */
+        #joystick-zone,
+        #joystick-zone * {
+            -webkit-user-select: none !important;
+            user-select: none !important;
+            -webkit-touch-callout: none !important;
+            touch-action: none !important;
+        }
+
+        /* Joystick nicht als riesige flexible Fläche, sondern als feste runde Zone */
+        #joystick-zone {
+            flex: 0 0 auto;
+            width: min(72vw, 360px);
+            height: min(72vw, 360px);
+            max-width: 360px;
+            max-height: 360px;
+            margin: 20px auto;
+            position: relative;
+            overflow: hidden;
+            border-radius: 50%;
+        }
+
+        /* Haupt-App wirklich auf Bildschirmhöhe begrenzen */
+        .app {
+            height: 100vh;
+            height: 100dvh;
+            overflow: hidden;
+            padding-top: calc(var(--safe-top) + 10px);
+            padding-bottom: calc(var(--safe-bottom) + 20px);
+        }
+
+
+    </style>
+</head>
+<body>
+
+<div class="debug-box" id="debugBox"></div>
+
+<!-- Setup Screen -->
+<div class="setup" id="setupScreen">
+    <h1>Verbindung einrichten</h1>
+    <p>Deine lokalen MQTT-Daten</p>
+    <div class="input-group">
+        <div class="input-row">
+            <label>Broker</label>
+            <input type="text" id="broker" value="ws://192.168.10.51:9001" placeholder="ws://192.168.x.x:9001">
+        </div>
+        <div class="input-row">
+            <label>User</label>
+            <input type="text" id="username" placeholder="(optional)">
+        </div>
+        <div class="input-row">
+            <label>Passwort</label>
+            <input type="password" id="password" placeholder="(optional)">
+        </div>
+    </div>
+    <button class="btn" id="connectBtn">Verbinden & Speichern</button>
+</div>
+
+<!-- Main App -->
+<div class="app hidden" id="mainApp">
+    <div style="width: 100%; display: flex; justify-content: flex-end; padding: 10px 20px;">
+        <button class="settings-link" id="settingsBtn" style="margin-right: 15px;">Bearbeiten</button>
+        <button class="settings-link" id="resetBtn" style="color: var(--ios-red); font-weight: bold;">Reset</button>
+    </div>
+
+    <div class="data-label" id="telemetryLabel">Bereit zum Steuern</div>
+
+    <!-- Joystick Bereich -->
+    <div id="joystick-zone"></div>
+
+    <!-- Not-Aus Button -->
+    <button class="stop-btn" id="stopBtn">🛑 STOP</button>
+    <button class="home-btn" id="homeBtn">HOME</button>
+    <button class="work-btn" id="workBtn">WORK</button>
+
+    <div class="status-bar">
+        <span class="status-dot" id="statusDot"></span>
+        <span id="statusText">Initialisiere...</span>
+    </div>
+</div>
+
+<script>
+    function showDebug(message, isError = false) {
+        const debugBox = document.getElementById('debugBox');
+        if (debugBox) {
+            debugBox.textContent = message;
+            debugBox.className = 'debug-box show' + (isError ? ' error' : '');
+        }
+        console.log(message);
+    }
+
+    window.onerror = function (message, source, lineno, colno, error) {
+        showDebug('FEHLER: ' + message + ' (Zeile ' + lineno + ')', true);
+        return true;
+    };
+
+    try {
+        const TOPIC_JOYSTICK = "rover/joystick";
+        let client = null;
+        let joystickManager = null;
+
+        const setupScreen = document.getElementById('setupScreen');
+        const mainApp = document.getElementById('mainApp');
+        const brokerInput = document.getElementById('broker');
+        const usernameInput = document.getElementById('username');
+        const passwordInput = document.getElementById('password');
+        const connectBtn = document.getElementById('connectBtn');
+        const settingsBtn = document.getElementById('settingsBtn');
+        const resetBtn = document.getElementById('resetBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const homeBtn = document.getElementById('homeBtn');
+        const workBtn = document.getElementById('workBtn');
+
+        const telemetryLabel = document.getElementById('telemetryLabel');
+        const statusDot = document.getElementById('statusDot');
+        const statusText = document.getElementById('statusText');
+
+        showDebug('App geladen ✓');
+
+        function loadSettings() {
+            const saved = localStorage.getItem('rover_mqtt');
+            if (saved) {
+                try {
+                    const data = JSON.parse(saved);
+                    brokerInput.value = data.broker || 'ws://192.168.10.51:9001';
+                    usernameInput.value = data.username || '';
+                    passwordInput.value = data.password || '';
+                    return true;
+                } catch (e) {
+                }
+            }
+            return false;
+        }
+
+        function saveSettings() {
+            localStorage.setItem('rover_mqtt', JSON.stringify({
+                broker: brokerInput.value.trim(),
+                username: usernameInput.value.trim(),
+                password: passwordInput.value
+            }));
+        }
+
+        function setStatus(state, text) {
+            statusDot.className = 'status-dot ' + state;
+            statusText.textContent = text;
+        }
+
+        let lastJoystickSend = 0;
+        let lastJoystickPayload = '';
+
+        function sendJoystickData(x, y, force = false) {
+            if (!client || !client.connected) return;
+
+            const now = Date.now();
+
+            // Max. 20x pro Sekunde senden, außer force=true
+            if (!force && now - lastJoystickSend < 50) return;
+
+            const data = {
+                x: parseFloat(x.toFixed(2)),
+                y: parseFloat(y.toFixed(2))
+            };
+
+            const payload = JSON.stringify(data);
+
+            // Keine identischen Werte unnötig senden
+            if (!force && payload === lastJoystickPayload) return;
+
+            lastJoystickSend = now;
+            lastJoystickPayload = payload;
+
+            client.publish(TOPIC_JOYSTICK, payload, {retain: false});
+            telemetryLabel.textContent = `X: ${data.x.toFixed(2)} | Y: ${data.y.toFixed(2)}`;
+        }
+
+        function connect() {
+            const url = brokerInput.value.trim();
+            if (!url.startsWith('ws://') && !url.startsWith('wss://')) {
+                alert('Broker muss mit ws:// oder wss:// beginnen!');
+                return;
+            }
+
+            setStatus('connecting', 'Verbinde...');
+            saveSettings();
+
+            const options = {
+                clientId: 'rover_pwa_' + Math.random().toString(16).substr(2, 8),
+                clean: true,
+                connectTimeout: 5000,
+                reconnectPeriod: 3000,
+            };
+
+            if (usernameInput.value.trim()) options.username = usernameInput.value.trim();
+            if (passwordInput.value) options.password = passwordInput.value;
+
+            try {
+                client = mqtt.connect(url, options);
+            } catch (e) {
+                setStatus('error', 'Fehler: ' + e.message);
+                return;
+            }
+
+            client.on('connect', () => {
+                setStatus('connected', 'Verbunden & Bereit');
+                showDebug('MQTT verbunden ✓');
+
+                // 2. ERST JETZT abonnieren!
+                // (Falls die Verbindung abbricht und sich neu aufbaut,
+                // passiert das hier automatisch wieder. Das ist der Schlüssel zur Stabilität.)
+                client.subscribe("rover/status", (err) => {
+                    if (!err) {
+                        showDebug('Status-Topic abonniert ✓');
+                    }
+                });
+
+                // Falls dein Python-Skript Befehle zurückschickt (z.B. "bestätigt" oder "akku: 80%")
+                client.subscribe("rover/cmd", (err) => {
+                    if (!err) {
+                        showDebug('CMD-Topic abonniert ✓');
+                    }
+                });
+
+
+                initJoystick(); // Joystick erst aktivieren, wenn verbunden
+            });
+
+
+            // ... (direkt nach dem client.on('connect', ...) Block) ...
+
+            client.on('message', (topic, message) => {
+                try {
+                    // Die Nachricht kommt als Buffer an, wir wandeln sie in einen String um
+                    const payload = message.toString();
+                    console.log(`[MQTT Empfang] Topic: ${topic} | Daten: ${payload}`);
+
+                    // --- Fall 1: Einfacher Status-Text ---
+                    if (topic === "rover/status") {
+                        // Zeigt z.B. "Fährt vorwärts", "Gestoppt", "Fehler" an
+                        telemetryLabel.textContent = `Rover: ${payload}`;
+                    }
+
+                    // --- Fall 2: Strukturierte Telemetrie-Daten (JSON) ---
+                    else if (topic === "rover/telemetry") {
+                        // Wir erwarten etwas wie: {"battery": 85, "temp": 42.5}
+                        const data = JSON.parse(payload);
+
+                        let displayText = "";
+                        if (data.battery !== undefined) {
+                            displayText += `⚡ Akku: ${data.battery}% `;
+                        }
+                        if (data.temp !== undefined) {
+                            displayText += `🌡️ Temp: ${data.temp}°C`;
+                        }
+
+                        if (displayText) {
+                            telemetryLabel.textContent = displayText;
+                        }
+                    }
+
+                    // --- Fall 3: Bestätigung von Kommandos ---
+                    else if (topic === "rover/cmd") {
+                        // Wenn der Rover z.B. "stop_bestätigt" zurückschickt
+                        showDebug(`myRover meldet: ${payload}`);
+                    }
+
+                } catch (error) {
+                    // Falls der Rover mal ungültiges JSON oder Müll schickt,
+                    // stürzt die App nicht ab, sondern loggt es nur.
+                    console.error("Fehler beim Verarbeiten der MQTT-Nachricht:", error);
+                }
+            });
+
+            // ... (danach kommt client.on('error', ...) usw.) ...
+
+
+            client.on('error', (err) => {
+                setStatus('error', 'Fehler im Broker');
+            });
+
+            client.on('close', () => {
+                setStatus('', 'Getrennt');
+                if (joystickManager) joystickManager.destroy();
+            });
+        }
+
+        function disconnect() {
+            if (client) {
+                client.end(true);
+                client = null;
+            }
+            if (joystickManager) {
+                joystickManager.destroy();
+                joystickManager = null;
+            }
+        }
+
+
+// iOS Kontextmenü, Textauswahl und Drag verhindern
+        document.addEventListener('contextmenu', function (e) {
+            if (!e.target.closest('input')) {
+                e.preventDefault();
+            }
+        }, {capture: true});
+
+        document.addEventListener('selectstart', function (e) {
+            if (!e.target.closest('input')) {
+                e.preventDefault();
+            }
+        }, {capture: true});
+
+        document.addEventListener('dragstart', function (e) {
+            e.preventDefault();
+        }, {capture: true});
+
+// Pinch-Zoom auf iOS verhindern
+        document.addEventListener('gesturestart', function (e) {
+            e.preventDefault();
+        });
+
+// Touch-Scroll innerhalb der Joystick-Zone hart blockieren
+        const joyZone = document.getElementById('joystick-zone');
+
+        ['touchstart', 'touchmove', 'touchend', 'touchcancel'].forEach(function (eventName) {
+            joyZone.addEventListener(eventName, function (e) {
+                e.preventDefault();
+            }, {passive: false});
+        });
+
+
+        function initJoystick() {
+            const zone = document.getElementById('joystick-zone');
+
+            // Wichtig: alten Joystick sauber entfernen, falls MQTT reconnectet
+            if (joystickManager) {
+                joystickManager.destroy();
+                joystickManager = null;
+            }
+
+            zone.innerHTML = '';
+
+            joystickManager = nipplejs.create({
+                zone: zone,
+                mode: 'static',
+                position: {left: '50%', top: '50%'},
+                color: '#007AFF',
+                size: 220,
+
+                // Nur ein Finger / ein Joystick
+                multitouch: false,
+                maxNumberOfNipples: 1,
+
+                // Beim Loslassen schön zurücksetzen
+                restJoystick: true,
+                restOpacity: 0.7,
+                fadeTime: 100
+            });
+
+            joystickManager.on('move', function (evt, data) {
+                if (data && data.vector) {
+                    sendJoystickData(data.vector.x, data.vector.y);
+                }
+            });
+
+            joystickManager.on('end', function () {
+                sendJoystickData(0, 0, true);
+                telemetryLabel.textContent = 'Gestoppt';
+            });
+        }
+
+        // Event Listener
+        connectBtn.addEventListener('click', () => {
+            setupScreen.classList.add('hidden');
+            mainApp.classList.remove('hidden');
+            connect();
+        });
+
+        settingsBtn.addEventListener('click', () => {
+            disconnect();
+            mainApp.classList.add('hidden');
+            setupScreen.classList.remove('hidden');
+        });
+
+        if (resetBtn) {
+            resetBtn.addEventListener('click', () => {
+                if (confirm('Alle Daten löschen und zum Setup?')) {
+                    localStorage.removeItem('rover_mqtt');
+                    disconnect();
+                    mainApp.classList.add('hidden');
+                    setupScreen.classList.remove('hidden');
+                    brokerInput.value = 'ws://192.168.10.51:9001';
+                    usernameInput.value = '';
+                    passwordInput.value = '';
+                }
+            });
+        }
+
+        stopBtn.addEventListener('click', () => {
+            sendJoystickData(0, 0, true);
+            telemetryLabel.textContent = "STOP ausgelöst!";
+            // Optional: Sende auch an das alte Topic, falls dein Skript das braucht
+            if (client && client.connected) {
+                client.publish("rover/cmd", "stop", {retain: false});
+            }
+        });
+
+        homeBtn.addEventListener('click', () => {
+            sendJoystickData(0, 0, true);
+            telemetryLabel.textContent = "Zurück zur Ladestation!";
+            // Optional: Sende auch an das alte Topic, falls dein Skript das braucht
+            if (client && client.connected) {
+                client.publish("rover/cmd", "home", {retain: false});
+            }
+        });
+
+
+        workBtn.addEventListener('click', () => {
+            sendJoystickData(0, 0, true);
+            telemetryLabel.textContent = "Automatik gestartet!";
+            // Optional: Sende auch an das alte Topic, falls dein Skript das braucht
+            if (client && client.connected) {
+                client.publish("rover/cmd", "work", {retain: false});
+            }
+        });
+
+
+        if (loadSettings()) {
+            setupScreen.classList.add('hidden');
+            mainApp.classList.remove('hidden');
+            connect();
+        }
+
+    } catch (error) {
+        showDebug('KRITISCH: ' + error.message, true);
+    }
+</script>
+</body>
+</html>
