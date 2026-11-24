@@ -173,9 +173,18 @@
         if (state.guideline && state.guideline.length > 0) {
             points.push(...state.guideline);
         }
+        // 🎯 Donelinie-Punkte hinzufügen
+        if (state.doneline && state.doneline.length > 0) {
+            points.push(...state.doneline);
+        }
         // 🎯 Worklinie-Punkte hinzufügen
         if (state.workline && state.workline.length > 0) {
             points.push(...state.workline);
+        }
+
+        // 🎯 Blocklinie-Punkte hinzufügen
+        if (state.blockline && state.blockline.length > 0) {
+            points.push(...state.blockline);
         }
 
 
@@ -366,7 +375,7 @@
     }
 
     // Leitlinie-Zeichenfunktion:
-    function drawWorkline(points, bounds) {
+    function drawDoneline(points, bounds) {
         if (!points || points.length < 2) return;
 
         ctx.beginPath();
@@ -380,7 +389,7 @@
 
         // Keine Füllung, nur Linie
         //ctx.strokeStyle = '#ff8800';  // Orange
-        ctx.strokeStyle = 'rgb(52 53 41 / 0.3)'; // Lila, gepunktet
+        ctx.strokeStyle = 'rgb(150 221 133)'; // Lila, gepunktet
         ctx.lineWidth = 4;
         //ctx.setLineDash([10, 5]);  // Gestrichelt
         //ctx.setLineDash([3, 3]); //gepunktet
@@ -398,6 +407,72 @@
         });
     }
 
+    // Leitlinie-Zeichenfunktion:
+    function drawWorkline(points, bounds) {
+        if (!points || points.length < 2) return;
+
+        ctx.beginPath();
+        const first = worldToScreen(points[0].x, points[0].y, bounds);
+        ctx.moveTo(first.x, first.y);
+
+        for (let i = 1; i < points.length; i++) {
+            const p = worldToScreen(points[i].x, points[i].y, bounds);
+            ctx.lineTo(p.x, p.y);
+        }
+
+        // Keine Füllung, nur Linie
+        //ctx.strokeStyle = '#ff8800';  // Orange
+        ctx.strokeStyle = 'rgb(250 104 122)'; // Lila, gepunktet
+        ctx.lineWidth = 4;
+        //ctx.setLineDash([10, 5]);  // Gestrichelt
+        //ctx.setLineDash([3, 3]); //gepunktet
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // Punkte an den Ecken zeichnen
+        //ctx.fillStyle = '#ff8800';
+        ctx.fillStyle = 'rgb(85 215 54)'; // Lila, gepunktet
+        points.forEach(point => {
+            const p = worldToScreen(point.x, point.y, bounds);
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, 5, 0, 2 * Math.PI);
+            ctx.fill();
+        });
+    }
+
+    // Block-Zeichenfunktion:
+
+    function drawBlockpoints(points, bounds) {
+        if (!points || points.length < 2) return;
+
+        ctx.beginPath();
+        const first = worldToScreen(points[0].x, points[0].y, bounds);
+        ctx.moveTo(first.x, first.y);
+
+        for (let i = 1; i < points.length; i++) {
+            const p = worldToScreen(points[i].x, points[i].y, bounds);
+            // ctx.lineTo(p.x, p.y);
+        }
+
+        // Keine Füllung, nur Linie
+        //ctx.strokeStyle = '#ff8800';  // Orange
+        ctx.strokeStyle = 'rgb(250 104 122)'; // Lila, gepunktet
+        ctx.lineWidth = 4;
+        //ctx.setLineDash([10, 5]);  // Gestrichelt
+        //ctx.setLineDash([3, 3]); //gepunktet
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // Punkte an den Ecken zeichnen
+        //ctx.fillStyle = '#ff8800';
+        ctx.fillStyle = 'rgb(246 7 36)'; // Lila, gepunktet
+        points.forEach(point => {
+            const p = worldToScreen(point.x, point.y, bounds);
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, 5, 0, 2 * Math.PI);
+            ctx.fill();
+        });
+    }
 
     function drawLP(point, bounds) {
         const p = worldToScreen(point.x, point.y, bounds);
@@ -428,9 +503,18 @@
         if (state.guideline) {
             drawGuideline(state.guideline, bounds);
         }
+        // 🎯 Donelinie zuerst zeichnen
+        if (state.doneline) {
+            drawDoneline(state.doneline, bounds);
+        }
         // 🎯 Worklinie zuerst zeichnen
         if (state.workline) {
             drawWorkline(state.workline, bounds);
+        }
+
+        // 🎯 Blocklinie zuerst zeichnen
+        if (state.blockline) {
+            drawBlockpoints(state.blockline, bounds);
         }
 
         // 🎯 Polygon zuerst zeichnen (liegt im Hintergrund)
