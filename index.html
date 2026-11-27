@@ -59,6 +59,7 @@
             display: none;
         }
 
+
         .setup h1 {
             font-size: 26px;
             margin-bottom: 8px;
@@ -71,6 +72,34 @@
             text-align: center;
             margin-bottom: 32px;
         }
+
+
+        .workreset {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            padding: 40px 24px;
+        }
+
+        .workreset.hidden {
+            display: none;
+        }
+
+
+        .workreset h1 {
+            font-size: 26px;
+            margin-bottom: 8px;
+            text-align: center;
+        }
+
+        .workreset p {
+            font-size: 15px;
+            color: var(--ios-gray);
+            text-align: center;
+            margin-bottom: 32px;
+        }
+
 
         .input-group {
             background: var(--ios-card);
@@ -120,11 +149,25 @@
             opacity: 0.7;
         }
 
+        .work-btn:disabled {
+            opacity: 0.2;
+            cursor: not-allowed; /* Zeigt am PC ein Verbots-Symbol */
+            pointer-events: none; /* Verhindert Klicks/Touch-Events zusätzlich */
+        }
+
+        .home-btn:disabled {
+            opacity: 0.2;
+            cursor: not-allowed; /* Zeigt am PC ein Verbots-Symbol */
+            pointer-events: none; /* Verhindert Klicks/Touch-Events zusätzlich */
+        }
+
+
         .app {
             flex: 1;
             display: flex;
             flex-direction: column;
             padding: 20px;
+            position: relative;
             position: relative;
         }
 
@@ -261,6 +304,17 @@
             }
         }
 
+        .workreset-link {
+            color: var(--ios-green);
+            font-size: 15px;
+            text-decoration: none;
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-family: inherit;
+            font-weight: 600;
+        }
+
         .settings-link {
             color: var(--ios-blue);
             font-size: 15px;
@@ -274,13 +328,13 @@
 
         .debug-box {
             position: fixed;
-            top: 10px;
+            top: 1px;
             left: 10px;
             right: 10px;
             background: #fff3cd;
             border: 2px solid #ffc107;
             border-radius: 8px;
-            padding: 12px;
+            padding: 1px;
             font-family: monospace;
             font-size: 12px;
             z-index: 9999;
@@ -384,9 +438,16 @@
     <button class="btn" id="connectBtn">Verbinden & Speichern</button>
 </div>
 
+<div class="workreset" id="workresetScreen">
+    <h1>Arbeitsbereich auf Anfang setzen</h1>
+    <button class="btn" id="workresetdoBtn">Auf Anfang!</button>
+</div>
+
+
 <!-- Main App -->
 <div class="app hidden" id="mainApp">
     <div style="width: 100%; display: flex; justify-content: flex-end; padding: 10px 20px;">
+        <button class="workreset-link" id="workresetBtn" style="margin-right: 15px;">Auf Anfang</button>
         <button class="settings-link" id="settingsBtn" style="margin-right: 15px;">Bearbeiten</button>
         <button class="settings-link" id="resetBtn" style="color: var(--ios-red); font-weight: bold;">Reset</button>
     </div>
@@ -426,13 +487,14 @@
         const TOPIC_JOYSTICK = "rover/joystick";
         let client = null;
         let joystickManager = null;
-
+        const workresetScreen = document.getElementById('workresetScreen');
         const setupScreen = document.getElementById('setupScreen');
         const mainApp = document.getElementById('mainApp');
         const brokerInput = document.getElementById('broker');
         const usernameInput = document.getElementById('username');
         const passwordInput = document.getElementById('password');
         const connectBtn = document.getElementById('connectBtn');
+        const workresetBtn = document.getElementById('workresetBtn');
         const settingsBtn = document.getElementById('settingsBtn');
         const resetBtn = document.getElementById('resetBtn');
         const stopBtn = document.getElementById('stopBtn');
@@ -548,8 +610,17 @@
                     }
                 });
 
+                client.subscribe("rover/work", (err) => {
+                    if (!err) {
+                        showDebug('Work-Topic abonniert ✓');
+                    }
+                });
+
 
                 initJoystick(); // Joystick erst aktivieren, wenn verbunden
+                homeBtn.disabled = false
+                workBtn.disabled = false
+
             });
 
 
@@ -566,6 +637,11 @@
                         // Zeigt z.B. "Fährt vorwärts", "Gestoppt", "Fehler" an
                         telemetryLabel.textContent = `Rover: ${payload}`;
                     }
+                    if (topic === "rover/work") {
+                        // Zeigt z.B. "Fährt vorwärts", "Gestoppt", "Fehler" an
+                        workBtn.textContent = `WORKING ${payload}`;
+                    }
+
 
                     // --- Fall 2: Strukturierte Telemetrie-Daten (JSON) ---
                     else if (topic === "rover/telemetry") {
@@ -607,6 +683,8 @@
 
             client.on('close', () => {
                 setStatus('', 'Getrennt');
+                homeBtn.disabled = true
+                workBtn.disabled = true
                 if (joystickManager) joystickManager.destroy();
             });
         }
@@ -701,7 +779,21 @@
             mainApp.classList.remove('hidden');
             connect();
         });
+        workresetdoBtn.addEventListener('click', () => {
+            //senden reset an mqtt xxxx
+            if (client && client.connected) {
+                client.publish("rover/map-reset", "1", {retain: false});
+            }
 
+            workresetScreen.classList.add('hidden');
+            mainApp.classList.remove('hidden');
+        });
+
+
+        workresetBtn.addEventListener('click', () => {
+            mainApp.classList.add('hidden');
+            workresetScreen.classList.remove('hidden');
+        });
         settingsBtn.addEventListener('click', () => {
             disconnect();
             mainApp.classList.add('hidden');
@@ -723,6 +815,7 @@
         }
 
         stopBtn.addEventListener('click', () => {
+            workBtn.textContent = "WORK";
             sendJoystickData(0, 0, true);
             telemetryLabel.textContent = "STOP ausgelöst!";
             // Optional: Sende auch an das alte Topic, falls dein Skript das braucht
@@ -747,11 +840,13 @@
             // Optional: Sende auch an das alte Topic, falls dein Skript das braucht
             if (client && client.connected) {
                 client.publish("rover/cmd", "work", {retain: false});
+                workBtn.textContent = "WORKING";
             }
         });
 
 
         if (loadSettings()) {
+            workresetScreen.classList.add('hidden');
             setupScreen.classList.add('hidden');
             mainApp.classList.remove('hidden');
             connect();
